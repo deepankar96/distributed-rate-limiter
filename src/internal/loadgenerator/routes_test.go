@@ -1,11 +1,11 @@
-package gateway_test
+package loadgenerator_test
 
 import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
-	"github.com/deepankar96/distributed-rate-limiter/internal/gateway"
+	"github.com/deepankar96/distributed-rate-limiter/internal/loadgenerator"
 )
 
 func TestRoutes(t *testing.T) {
@@ -23,7 +23,7 @@ func TestRoutes(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			handler := gateway.NewHandler()
+			handler := loadgenerator.NewHandler()
 			request := httptest.NewRequest(tt.method, tt.path, nil)
 			response := httptest.NewRecorder()
 

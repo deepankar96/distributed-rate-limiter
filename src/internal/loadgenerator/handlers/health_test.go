@@ -5,7 +5,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/deepankar96/distributed-rate-limiter/internal/gateway/handlers"
+	"github.com/deepankar96/distributed-rate-limiter/internal/loadgenerator/handlers"
 )
 
 func TestHealth(t *testing.T) {

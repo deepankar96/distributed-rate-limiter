@@ -3,6 +3,8 @@ package ratelimiter_test
 import (
 	"net/http"
 	"net/http/httptest"
+	"strconv"
+	"sync"
 	"testing"
 
 	"github.com/deepankar96/distributed-rate-limiter/internal/ratelimiter"
@@ -64,5 +66,53 @@ func TestNewHandlerHasIndependentCounters(t *testing.T) {
 	first.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/check?userid=alice", nil))
 	if response.Code != http.StatusTooManyRequests {
 		t.Fatalf("first handler after second handler's requests: status = %d, want %d", response.Code, http.StatusTooManyRequests)
+	}
+}
+
+func TestConcurrentRequestsKeepUserAllowancesIndependent(t *testing.T) {
+	const (
+		userCount       = 8
+		requestsPerUser = 12
+		requestCount    = userCount * requestsPerUser
+	)
+	type result struct {
+		user   int
+		status int
+	}
+
+	handler := ratelimiter.NewHandler()
+	start := make(chan struct{})
+	results := make(chan result, requestCount)
+	var wg sync.WaitGroup
+	for request := 0; request < requestCount; request++ {
+		wg.Add(1)
+		go func(user int) {
+			defer wg.Done()
+			<-start
+			response := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodGet, "/check?userid="+strconv.Itoa(user), nil)
+			handler.ServeHTTP(response, req)
+			results <- result{user: user, status: response.Code}
+		}(request % userCount)
+	}
+	close(start)
+	wg.Wait()
+	close(results)
+
+	var allowed, denied [userCount]int
+	for got := range results {
+		switch got.status {
+		case http.StatusOK:
+			allowed[got.user]++
+		case http.StatusTooManyRequests:
+			denied[got.user]++
+		default:
+			t.Errorf("user %d got unexpected status %d", got.user, got.status)
+		}
+	}
+	for user := 0; user < userCount; user++ {
+		if allowed[user] != 5 || denied[user] != requestsPerUser-5 {
+			t.Errorf("user %d: allowed %d, denied %d; want 5 allowed and %d denied", user, allowed[user], denied[user], requestsPerUser-5)
+		}
 	}
 }

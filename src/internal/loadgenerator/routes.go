@@ -1,9 +1,9 @@
-package gateway
+package loadgenerator
 
 import (
 	"net/http"
 
-	"github.com/deepankar96/distributed-rate-limiter/internal/gateway/handlers"
+	"github.com/deepankar96/distributed-rate-limiter/internal/loadgenerator/handlers"
 )
 
 func NewHandler() http.Handler {
