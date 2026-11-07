@@ -10,9 +10,9 @@ import (
 func NewHandler() http.Handler {
 	mux := http.NewServeMux()
 
-	l := limiter.New(5)
+	users := limiter.NewUserLimiters()
 
 	mux.HandleFunc("GET /healthz", handlers.Health)
-	mux.HandleFunc("GET /check", handlers.CheckLimit(l))
+	mux.HandleFunc("GET /check", handlers.CheckLimit(users))
 	return mux
 }
