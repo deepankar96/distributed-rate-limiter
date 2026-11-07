@@ -8,10 +8,6 @@ import (
 )
 
 func main() {
-	// limit := 100
-	// for i := 0; i < 101; i++ {
-	// 	fmt.Println(limiter.CheckLimit(&limit))
-	// }
 
 	server := &http.Server{
 		Addr:    ":3000",
