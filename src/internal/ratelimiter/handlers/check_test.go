@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/deepankar96/distributed-rate-limiter/internal/ratelimiter/handlers"
-	"github.com/deepankar96/distributed-rate-limiter/internal/ratelimiter/limiter"
+
 	tokenbucketlimiter "github.com/deepankar96/distributed-rate-limiter/internal/ratelimiter/tokenBucketLimiter"
 )
 
@@ -16,7 +16,7 @@ func TestCheckLimitPerUser(t *testing.T) {
 		name       string
 		newLimiter func() handlers.RequestLimiter
 	}{
-		{"counter", func() handlers.RequestLimiter { return limiter.NewUserLimiters() }},
+
 		// Zero refill keeps the HTTP contract tests independent of wall-clock timing.
 		{"token bucket", func() handlers.RequestLimiter { return tokenbucketlimiter.New(0, 5) }},
 	}
@@ -50,7 +50,7 @@ func TestCheckLimitSharesCollectionState(t *testing.T) {
 		name    string
 		limiter handlers.RequestLimiter
 	}{
-		{"counter", limiter.NewUserLimiters()},
+
 		{"token bucket", tokenbucketlimiter.New(0, 5)},
 	}
 	for _, implementation := range implementations {

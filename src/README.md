@@ -41,17 +41,16 @@ The constructor takes **refill rate first, capacity second**:
 - Different user IDs have independent buckets.
 - State is in memory, is not shared across instances, and resets on restart. User entries are not currently removed.
 
-The older counter implementation in `internal/ratelimiter/limiter/` still provides five calls per user without time-based replenishment. It remains for comparison and tests; it is not currently selected by the routes.
 
 ## Structure
 
 - `cmd/ratelimiter/main.go`: starts the server.
 - `internal/ratelimiter/routes.go`: creates the selected implementation and registers routes.
 - `internal/ratelimiter/handlers/`: HTTP input/output and the consumer-defined `RequestLimiter` interface.
-- `internal/ratelimiter/limiter/`: original counter implementation.
+
 - `internal/ratelimiter/tokenBucketLimiter/`: token-bucket implementation.
 
-Both limiter collections provide `Allow(userID string) bool`. The handler depends on that interface rather than on either algorithm's concrete type.
+The token-bucket collection provides `Allow(userID string) bool`. The handler depends on the `RequestLimiter` interface rather than on the algorithm's concrete type, so another implementation can be added later without changing the handler.
 
 ## Tests and static checks
 
@@ -77,11 +76,36 @@ For repeated concurrency checks:
 go test -race -run Concurrent -count=10 ./internal/ratelimiter/...
 ```
 
-The tests cover both algorithms, the handler interface, route wiring, independent user state, concurrent lookup/creation, and concurrent consumption. Refill arithmetic is tested with controlled timestamps; exact allowance tests use zero refill where needed to avoid wall-clock-sensitive expectations. No sleeps are required.
+The tests cover the token-bucket algorithm, the handler interface, route wiring, independent user state, concurrent lookup/creation, and concurrent consumption. Refill arithmetic is tested with controlled timestamps; exact allowance tests use zero refill where needed to avoid wall-clock-sensitive expectations. No sleeps are required.
 
 ## Load testing with k6
 
-Use k6 externally against the running service. No custom load generator, k6 script, or k6 dependency is included yet, and k6 is not required for the Go tests.
+Use k6 externally against the running service. The script at `../loadtests/token-bucket.js` defaults to 1,000 distinct users, each attempting approximately one request per second for two minutes. k6 is a separate tool and is not required for Go tests.
+
+From this `src` directory:
+
+```sh
+make docker-up
+curl -i 'http://localhost:3000/healthz'
+make load-test-smoke
+make load-test
+```
+
+Stop any existing host process using port 3000 before starting Docker. `make docker-up` builds a non-root, static service image and starts it in the background using `../compose.yaml`.
+
+The initial container budget is **2 CPUs and 256 MiB RAM**. `GOMAXPROCS=2` makes Go's CPU parallelism explicit, and `GOMEMLIMIT=192MiB` leaves headroom below the hard container memory limit. Go's memory limit is soft and does not cover all process memory; it does not guarantee protection from an OOM kill. The builder image is pinned to the project's Go 1.24.2 version; review and update the toolchain image as the project evolves.
+
+Inspect resource usage with Docker Desktop or `make docker-stats` (Ctrl-C exits the live view). You can also verify the configured hard limits from the repository root:
+
+```sh
+docker inspect --format '{{.HostConfig.NanoCpus}} {{.HostConfig.Memory}} {{.HostConfig.MemorySwap}}' distributed-rate-limiter-ratelimiter-1
+```
+
+With the default Compose project name, expected values are `2000000000 268435456 268435456`. A custom project name changes the container name. Memory+swap is set equal to memory to disable extra swap allowance where supported.
+
+Use `make docker-down` to stop and remove the container. Stopping or restarting the service discards its in-memory buckets. To reset before a comparable test, run `docker compose -f ../compose.yaml restart ratelimiter`, then check `/healthz` before starting k6.
+
+See [the load-test guide](../loadtests/README.md) for parameters, the local web dashboard, acceptance thresholds, and interpretation. The test generator runs on the host, outside the service's resource budget.
 
 When designing a k6 test:
 
@@ -93,9 +117,9 @@ When designing a k6 test:
 
 ## Synchronization to study
 
-- Each collection mutex protects the entire map lookup-or-create operation.
-- Each individual limiter or bucket mutex protects its check and state update.
-- The collection lock is released before the individual state is checked, so different users do not share a counter lock.
+- The collection mutex protects the entire map lookup-or-create operation.
+- Each bucket mutex protects its refill, check, and state update.
+- The collection lock is released before the individual bucket is checked, so different users do not share a bucket lock.
 - The token bucket captures current time after acquiring its lock.
 - Pointer receivers avoid copying structs containing mutexes. Do not copy a mutex after it has been used.
 - Constructors initialize map fields; mutex fields need no explicit initialization.

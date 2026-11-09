@@ -1,0 +1,24 @@
+services:
+  ratelimiter:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "127.0.0.1:3000:3000"
+    cpus: 2.0
+    mem_limit: 256m
+    # Equal memory+swap and memory limits prevent extra swap allowance, where supported.
+    memswap_limit: 256m
+    environment:
+      GOMAXPROCS: "2"
+      GOMEMLIMIT: "192MiB"
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
