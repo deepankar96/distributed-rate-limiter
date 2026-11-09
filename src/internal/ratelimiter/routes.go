@@ -4,13 +4,13 @@ import (
 	"net/http"
 
 	"github.com/deepankar96/distributed-rate-limiter/internal/ratelimiter/handlers"
-	"github.com/deepankar96/distributed-rate-limiter/internal/ratelimiter/limiter"
+	tokenbucketlimiter "github.com/deepankar96/distributed-rate-limiter/internal/ratelimiter/tokenBucketLimiter"
 )
 
 func NewHandler() http.Handler {
 	mux := http.NewServeMux()
 
-	users := limiter.NewUserLimiters()
+	users := tokenbucketlimiter.New(0.5, 30)
 
 	mux.HandleFunc("GET /healthz", handlers.Health)
 	mux.HandleFunc("GET /check", handlers.CheckLimit(users))

@@ -21,7 +21,14 @@ func NewUserLimiters() *UserLimiters {
 	return &UserLimiters{users: u}
 }
 
-func (u *UserLimiters) ForUsers(userID string) *Limiter {
+func (u *UserLimiters) Allow(userID string) bool {
+	l := u.forUsers(userID)
+
+	allowed, _ := l.checkLimit()
+	return allowed
+}
+
+func (u *UserLimiters) forUsers(userID string) *Limiter {
 	u.mu.Lock()
 	defer u.mu.Unlock()
 	_, exists := u.users[userID]
@@ -32,7 +39,7 @@ func (u *UserLimiters) ForUsers(userID string) *Limiter {
 	return u.users[userID]
 }
 
-func (l *Limiter) CheckLimit() (bool, int) {
+func (l *Limiter) checkLimit() (bool, int) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if l.remaining > 0 {

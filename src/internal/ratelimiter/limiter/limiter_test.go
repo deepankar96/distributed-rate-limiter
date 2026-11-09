@@ -5,7 +5,7 @@ import "testing"
 func TestCheckLimitConsumesOneCall(t *testing.T) {
 	l := New(5)
 
-	allowed, remaining := l.CheckLimit()
+	allowed, remaining := l.checkLimit()
 
 	if !allowed || remaining != 4 {
 		t.Errorf("got (%v, %d), want (true, 4)", allowed, remaining)
@@ -27,7 +27,7 @@ func TestNewSetsInitialAllowance(t *testing.T) {
 func TestCheckLimitExhaustion(t *testing.T) {
 	l := New(3)
 	for call := 1; call <= 6; call++ {
-		allowed, remaining := l.CheckLimit()
+		allowed, remaining := l.checkLimit()
 		wantAllowed := call <= 3
 		wantRemaining := max(3-call, 0)
 		if allowed != wantAllowed || remaining != wantRemaining {
@@ -39,7 +39,7 @@ func TestCheckLimitExhaustion(t *testing.T) {
 func TestCheckLimitDeniesWithZeroAllowance(t *testing.T) {
 	l := New(0)
 	for call := 1; call <= 3; call++ {
-		allowed, remaining := l.CheckLimit()
+		allowed, remaining := l.checkLimit()
 		if allowed || remaining != 0 {
 			t.Errorf("call %d: got (%v, %d), want (false, 0)", call, allowed, remaining)
 		}
@@ -48,8 +48,8 @@ func TestCheckLimitDeniesWithZeroAllowance(t *testing.T) {
 
 func TestNewLimitersAreIndependent(t *testing.T) {
 	first, second := New(5), New(5)
-	first.CheckLimit()
-	allowed, remaining := second.CheckLimit()
+	first.checkLimit()
+	allowed, remaining := second.checkLimit()
 	if !allowed || remaining != 4 {
 		t.Errorf("second limiter got (%v, %d), want (true, 4)", allowed, remaining)
 	}
@@ -67,15 +67,15 @@ func TestNewUserLimitersInitializesEmptyMap(t *testing.T) {
 
 func TestForUsersCreatesAndReusesLimiter(t *testing.T) {
 	users := NewUserLimiters()
-	l := users.ForUsers("1")
+	l := users.forUsers("1")
 	if l == nil {
 		t.Fatal("ForUsers returned nil")
 	}
 	if l.remaining != 5 {
 		t.Errorf("new user's allowance = %d, want 5", l.remaining)
 	}
-	l.CheckLimit()
-	if got := users.ForUsers("1"); got != l {
+	l.checkLimit()
+	if got := users.forUsers("1"); got != l {
 		t.Fatal("repeated lookup returned a different limiter")
 	}
 	if l.remaining != 4 {
@@ -88,15 +88,15 @@ func TestForUsersCreatesAndReusesLimiter(t *testing.T) {
 
 func TestForUsersKeepsExhaustedLimiter(t *testing.T) {
 	users := NewUserLimiters()
-	l := users.ForUsers("1")
+	l := users.forUsers("1")
 	for call := 0; call < 5; call++ {
-		l.CheckLimit()
+		l.checkLimit()
 	}
-	again := users.ForUsers("1")
+	again := users.forUsers("1")
 	if again != l {
 		t.Fatal("exhausted limiter was replaced")
 	}
-	allowed, remaining := again.CheckLimit()
+	allowed, remaining := again.checkLimit()
 	if allowed || remaining != 0 {
 		t.Errorf("exhausted user got (%v, %d), want (false, 0)", allowed, remaining)
 	}
@@ -104,14 +104,14 @@ func TestForUsersKeepsExhaustedLimiter(t *testing.T) {
 
 func TestForUsersKeepsUsersIndependent(t *testing.T) {
 	users := NewUserLimiters()
-	first, second := users.ForUsers("1"), users.ForUsers("2")
+	first, second := users.forUsers("1"), users.forUsers("2")
 	if first == second {
 		t.Fatal("different users share the same limiter")
 	}
 	for call := 0; call < 5; call++ {
-		first.CheckLimit()
+		first.checkLimit()
 	}
-	allowed, remaining := second.CheckLimit()
+	allowed, remaining := second.checkLimit()
 	if !allowed || remaining != 4 {
 		t.Errorf("second user got (%v, %d), want (true, 4)", allowed, remaining)
 	}
@@ -119,9 +119,23 @@ func TestForUsersKeepsUsersIndependent(t *testing.T) {
 
 func TestUserCollectionsAreIndependent(t *testing.T) {
 	first, second := NewUserLimiters(), NewUserLimiters()
-	first.ForUsers("1").CheckLimit()
-	allowed, remaining := second.ForUsers("1").CheckLimit()
+	first.forUsers("1").checkLimit()
+	allowed, remaining := second.forUsers("1").checkLimit()
 	if !allowed || remaining != 4 {
 		t.Errorf("second collection got (%v, %d), want (true, 4)", allowed, remaining)
+	}
+}
+
+func TestAllowUsesPerUserAllowance(t *testing.T) {
+	users := NewUserLimiters()
+	for _, userID := range []string{"alice", "bob"} {
+		for call := 1; call <= 7; call++ {
+			if got, want := users.Allow(userID), call <= 5; got != want {
+				t.Errorf("user %q, call %d: Allow = %v, want %v", userID, call, got, want)
+			}
+		}
+	}
+	if users.Allow("alice") {
+		t.Error("exhausted user received a fresh allowance after another user's requests")
 	}
 }

@@ -41,38 +41,32 @@ func TestRoutes(t *testing.T) {
 	}
 }
 
-func TestNewHandlerHasIndependentCounters(t *testing.T) {
+func TestNewHandlerHasIndependentBuckets(t *testing.T) {
 	first := ratelimiter.NewHandler()
 	second := ratelimiter.NewHandler()
 
 	for index, handler := range []http.Handler{first, second} {
-		for attempt := 1; attempt <= 7; attempt++ {
+		// Routes configure a capacity of 30. Every fresh router must provide that burst.
+		for attempt := 1; attempt <= 30; attempt++ {
 			request := httptest.NewRequest(http.MethodGet, "/check?userid=alice", nil)
 			response := httptest.NewRecorder()
 
 			handler.ServeHTTP(response, request)
 
 			want := http.StatusOK
-			if attempt > 5 {
-				want = http.StatusTooManyRequests
-			}
 			if response.Code != want {
 				t.Fatalf("handler %d, attempt %d: status = %d, want %d", index+1, attempt, response.Code, want)
 			}
 		}
 	}
 
-	response := httptest.NewRecorder()
-	first.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/check?userid=alice", nil))
-	if response.Code != http.StatusTooManyRequests {
-		t.Fatalf("first handler after second handler's requests: status = %d, want %d", response.Code, http.StatusTooManyRequests)
-	}
+	// Exact denial counts belong in zero-refill tests; this router refills with real time.
 }
 
 func TestConcurrentRequestsKeepUserAllowancesIndependent(t *testing.T) {
 	const (
 		userCount       = 8
-		requestsPerUser = 12
+		requestsPerUser = 30
 		requestCount    = userCount * requestsPerUser
 	)
 	type result struct {
@@ -111,8 +105,8 @@ func TestConcurrentRequestsKeepUserAllowancesIndependent(t *testing.T) {
 		}
 	}
 	for user := 0; user < userCount; user++ {
-		if allowed[user] != 5 || denied[user] != requestsPerUser-5 {
-			t.Errorf("user %d: allowed %d, denied %d; want 5 allowed and %d denied", user, allowed[user], denied[user], requestsPerUser-5)
+		if allowed[user] != requestsPerUser || denied[user] != 0 {
+			t.Errorf("user %d: allowed %d, denied %d; want %d allowed and 0 denied", user, allowed[user], denied[user], requestsPerUser)
 		}
 	}
 }

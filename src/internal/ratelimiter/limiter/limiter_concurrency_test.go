@@ -25,7 +25,7 @@ func TestCheckLimitConcurrent(t *testing.T) {
 			<-start
 			accepted := 0
 			for attempt := 0; attempt < attemptsPerWorker; attempt++ {
-				if allowed, _ := l.CheckLimit(); allowed {
+				if allowed, _ := l.checkLimit(); allowed {
 					accepted++
 				}
 			}
@@ -44,7 +44,7 @@ func TestCheckLimitConcurrent(t *testing.T) {
 	if accepted != initial {
 		t.Errorf("accepted %d calls, want %d", accepted, initial)
 	}
-	allowed, remaining := l.CheckLimit()
+	allowed, remaining := l.checkLimit()
 	if allowed || remaining != 0 {
 		t.Errorf("after workers finish: got (%v, %d), want (false, 0)", allowed, remaining)
 	}
@@ -69,7 +69,7 @@ func TestForUsersConcurrentLookupAndCreation(t *testing.T) {
 		go func(userID string) {
 			defer wg.Done()
 			<-start
-			results <- result{userID: userID, limiter: users.ForUsers(userID)}
+			results <- result{userID: userID, limiter: users.forUsers(userID)}
 		}(strconv.Itoa(worker % userCount))
 	}
 	close(start)
@@ -93,7 +93,7 @@ func TestForUsersConcurrentLookupAndCreation(t *testing.T) {
 		if l.remaining != 5 {
 			t.Errorf("lookup consumed allowance for user %q: got %d, want 5", userID, l.remaining)
 		}
-		if got := users.ForUsers(userID); got != l {
+		if got := users.forUsers(userID); got != l {
 			t.Errorf("stored limiter for user %q differs from the returned instance", userID)
 		}
 	}
