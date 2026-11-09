@@ -1,10 +1,6 @@
-.PHONY: run run-loadgenerator run-ratelimiter test test-race vet
+.PHONY: run run-ratelimiter test test-race vet
 
-run:
-	$(MAKE) -j2 run-loadgenerator run-ratelimiter
-
-run-loadgenerator:
-	go run ./cmd/loadgenerator
+run: run-ratelimiter
 
 run-ratelimiter:
 	go run ./cmd/ratelimiter

@@ -3,8 +3,10 @@
 ## Project purpose
 
 This is a learning project, not a request for AI to build a finished system.
-The goal is to design and build a gateway instance that performs routing,
-authentication, and rate limiting in a microservice architecture.
+The current goal is to design, build, and test a standalone rate limiter service
+while learning Go. Focus on limiter algorithms, per-user state, interfaces,
+concurrency, HTTP handling, and testing. Use k6 as an external load-testing tool;
+do not introduce a custom load generator or additional services unless explicitly asked.
 Help the learner understand the design decisions and implement the system themselves.
 
 ## Teaching style
@@ -37,8 +39,8 @@ Help the learner understand the design decisions and implement the system themse
 - Follow the learner's current scope and pace. Prefer the simplest design that
   demonstrates the concept being discussed.
 - Keep ordinary business logic separate from HTTP-specific behavior in explanations.
-- Discuss gateway routing, authentication, rate limiting, and service boundaries as
-  incremental learning steps—not as reasons to introduce the entire architecture at once.
+- Keep work focused on the rate limiter service. Treat distributed storage and
+  additional services as later learning steps, not prerequisites for the current scope.
 - When the learner intentionally sets aside a concern such as synchronization,
   persistence, or security, stay focused on the chosen concept. Briefly flag important
   limitations when relevant without expanding into an unsolicited implementation.
