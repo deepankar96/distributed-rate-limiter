@@ -1,6 +1,6 @@
 # Rate limiter service guide
 
-Run the commands below from this `src` directory. The service uses Go 1.24.2 or later and only the standard library. It is the only application currently in the project.
+Run the commands below from this `src` directory. The service uses Go 1.24.2 or later. The configuration package uses `godotenv` to load `.env` and `caarlos0/env/v11` to parse typed settings. The rate limiter is the only application currently in the project.
 
 ## Run
 
@@ -9,6 +9,32 @@ make run
 ```
 
 `make run-ratelimiter` is an equivalent command. The server listens on port 3000. Stop it with Ctrl-C; restart it after changing source or configuration.
+
+## Configuration loader
+
+`internal/config.Load()` requires a `.env` file in the process's working directory. For local development from `src`, create your file from the safe template:
+
+```sh
+cp .env.example .env
+```
+
+The loader uses these defaults when a value is missing or empty:
+
+| Variable | Default |
+| --- | --- |
+| `HTTP_ADDRESS` | `:3000` |
+| `HTTP_READ_TIMEOUT` | `5s` |
+| `HTTP_WRITE_TIMEOUT` | `5s` |
+| `REDIS_ADDRESS` | `localhost:6379` |
+| `REDIS_USERNAME` | Empty |
+| `REDIS_PASSWORD` | Empty |
+| `REDIS_DB` | `0` |
+
+Explicit nonempty values override the defaults. Timeouts use Go duration strings such as `5s` and must be positive; the Redis database must be a nonnegative integer. Redis username and password may be empty for unauthenticated local Redis. The `.env` file itself is still mandatory, even when it contains no settings.
+
+Existing environment variables take precedence over file values. The real `.env` is ignored by Git and excluded from Docker builds; `.env.example` contains only sample values.
+
+The loader is not yet called by `cmd/ratelimiter/main.go`, so these values do not change the running server yet. That startup wiring and the Redis connection are separate learning steps. When adding Docker startup wiring, remember that Compose environment injection does not create a `.env` file inside the container: mandatory file loading will require an explicit read-only mount at the expected path. Use `redis:6379` from Compose and `localhost:6379` from the host.
 
 ## Endpoints
 

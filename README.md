@@ -34,7 +34,7 @@ k6 run loadtests/token-bucket.js
 
 Stop any locally running service on port 3000 first. The container is limited to **2 CPUs and 256 MiB RAM**, with `GOMAXPROCS=2` and a **192 MiB soft Go memory limit**. Resource limits are in `compose.yaml`; a Dockerfile alone does not enforce them. These are initial experiment settings, not measured capacity requirements.
 
-The default load test runs **1,000 distinct user IDs for 2 minutes**, targeting about one request per second per user. It measures allowed and throttled responses separately; legitimate HTTP 429 decisions are not transport errors. Actual request rate can fall if the server or local generator is overloaded. See [the load-test guide](loadtests/README.md) for thresholds, configuration, and limitations.
+The default load test ramps up to **1,000 distinct user IDs over 10 seconds**, then measures **2 minutes** at that user count, targeting about one request per second per user. The final CLI summary and thresholds exclude ramp-up traffic. It measures allowed and throttled responses separately; legitimate HTTP 429 decisions are not transport errors. Actual request rate can fall if the server or local generator is overloaded. See [the load-test guide](loadtests/README.md) for thresholds, configuration, and limitations.
 
 Watch resource usage in Docker Desktop or run `docker compose stats` in another terminal. Stop the container with `docker compose down`.
 
