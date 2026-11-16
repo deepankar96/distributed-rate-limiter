@@ -20,10 +20,11 @@ type HTTPConfig struct {
 }
 
 type RedisConfig struct {
-	Address  string `env:"REDIS_ADDRESS,notEmpty" envDefault:"localhost:6379"`
-	Username string `env:"REDIS_USERNAME"`
-	Password string `env:"REDIS_PASSWORD"`
-	DB       int    `env:"REDIS_DB,notEmpty" envDefault:"0"`
+	Address  string        `env:"REDIS_ADDRESS,notEmpty" envDefault:"localhost:6379"`
+	Username string        `env:"REDIS_USERNAME"`
+	Password string        `env:"REDIS_PASSWORD"`
+	DB       int           `env:"REDIS_DB,notEmpty" envDefault:"0"`
+	Timeout  time.Duration `env:"REDIS_TIMEOUT,notEmpty" envDefault:"5s"`
 }
 
 func Load() (Config, error) {
@@ -44,6 +45,9 @@ func Load() (Config, error) {
 	}
 	if cfg.Redis.DB < 0 {
 		return Config{}, fmt.Errorf("REDIS_DB must be nonnegative")
+	}
+	if cfg.Redis.Timeout <= 0 {
+		return Config{}, fmt.Errorf("REDIS_TIMEOUT must be positive")
 	}
 
 	return cfg, nil
