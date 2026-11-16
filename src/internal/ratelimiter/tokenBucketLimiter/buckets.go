@@ -1,6 +1,7 @@
 package tokenbucketlimiter
 
 import (
+	"context"
 	"sync"
 )
 
@@ -27,9 +28,12 @@ func (b *buckets) forBucket(userID string) *bucket {
 	return b.buckets[userID]
 }
 
-func (b *buckets) Allow(userID string) bool {
+func (b *buckets) Allow(ctx context.Context, userID string) (bool, error) {
+	if err := ctx.Err(); err != nil {
+		return false, err
+	}
 	l := b.forBucket(userID)
 
 	allowed := l.checkLimit(b.refilRate, b.maxCapacity)
-	return allowed
+	return allowed, nil
 }

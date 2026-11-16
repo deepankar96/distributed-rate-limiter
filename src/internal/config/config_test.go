@@ -13,11 +13,12 @@ HTTP_READ_TIMEOUT=5s
 HTTP_WRITE_TIMEOUT=10s
 REDIS_ADDRESS=localhost:6379
 REDIS_DB=0
+REDIS_TIMEOUT=8s
 `
 
 var configKeys = []string{
 	"HTTP_ADDRESS", "HTTP_READ_TIMEOUT", "HTTP_WRITE_TIMEOUT",
-	"REDIS_ADDRESS", "REDIS_USERNAME", "REDIS_PASSWORD", "REDIS_DB",
+	"REDIS_ADDRESS", "REDIS_USERNAME", "REDIS_PASSWORD", "REDIS_DB", "REDIS_TIMEOUT",
 }
 
 // Load reads the working directory and process environment, so these tests must
@@ -44,7 +45,7 @@ func TestLoadParsesDotEnv(t *testing.T) {
 	}
 	want := Config{
 		HTTP:  HTTPConfig{Address: ":3000", ReadTimeout: 5 * time.Second, WriteTimeout: 10 * time.Second},
-		Redis: RedisConfig{Address: "localhost:6379", DB: 0},
+		Redis: RedisConfig{Address: "localhost:6379", DB: 0, Timeout: 8 * time.Second},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("configuration = %+v, want %+v", got, want)
@@ -112,7 +113,7 @@ func TestLoadUsesDefaults(t *testing.T) {
 			}
 			want := Config{
 				HTTP:  HTTPConfig{Address: ":3000", ReadTimeout: 5 * time.Second, WriteTimeout: 5 * time.Second},
-				Redis: RedisConfig{Address: "localhost:6379", DB: 0},
+				Redis: RedisConfig{Address: "localhost:6379", DB: 0, Timeout: 5 * time.Second},
 			}
 			if !reflect.DeepEqual(got, want) {
 				t.Errorf("configuration = %+v, want defaults %+v", got, want)
@@ -132,6 +133,9 @@ func TestLoadRejectsInvalidValues(t *testing.T) {
 		{"REDIS_DB", "not-an-integer", "DB"},
 		{"REDIS_DB", "1.5", "DB"},
 		{"REDIS_DB", "-1", "REDIS_DB"},
+		{"REDIS_TIMEOUT", "invalid", "Timeout"},
+		{"REDIS_TIMEOUT", "0s", "REDIS_TIMEOUT"},
+		{"REDIS_TIMEOUT", "-1s", "REDIS_TIMEOUT"},
 	} {
 		t.Run(tc.key+"/"+tc.value, func(t *testing.T) {
 			prepareConfig(t, validDotEnv)

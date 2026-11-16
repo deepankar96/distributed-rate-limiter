@@ -7,6 +7,7 @@ import (
 
 	"github.com/deepankar96/distributed-rate-limiter/internal/config"
 	"github.com/deepankar96/distributed-rate-limiter/internal/ratelimiter"
+	redislimiter "github.com/deepankar96/distributed-rate-limiter/internal/ratelimiter/redisLimiter"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -32,11 +33,16 @@ func main() {
 		log.Fatal("Redis startup check failed ", err)
 	}
 
+	users, err := redislimiter.NewLimiter(client, 30, 0.5)
+	if err != nil {
+		log.Fatal("Initialized Redis Limiter ", err)
+	}
+
 	server := &http.Server{
 		Addr:         cfg.HTTP.Address,
 		ReadTimeout:  cfg.HTTP.ReadTimeout,
 		WriteTimeout: cfg.HTTP.WriteTimeout,
-		Handler:      ratelimiter.NewHandler(),
+		Handler:      ratelimiter.NewHandler(users),
 	}
 
 	log.Println("Starting Rate Limiter on port ", cfg.HTTP.Address)

@@ -1,6 +1,8 @@
 package handlers_test
 
 import (
+	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -76,38 +78,67 @@ func TestCheckLimitSharesCollectionState(t *testing.T) {
 	}
 }
 
-type requestLimiterFunc func(string) bool
+type requestLimiterFunc func(context.Context, string) (bool, error)
 
-func (f requestLimiterFunc) Allow(userID string) bool { return f(userID) }
+func (f requestLimiterFunc) Allow(ctx context.Context, userID string) (bool, error) {
+	return f(ctx, userID)
+}
 
-func TestCheckLimitUsesInterfaceDecisionAndQueryUserID(t *testing.T) {
-	for _, allowed := range []bool{true, false} {
-		name := "denied"
-		if allowed {
-			name = "allowed"
-		}
-		t.Run(name, func(t *testing.T) {
+type checkResponseRecorder struct {
+	*httptest.ResponseRecorder
+	statusWrites []int
+}
+
+func (r *checkResponseRecorder) WriteHeader(status int) {
+	r.statusWrites = append(r.statusWrites, status)
+	r.ResponseRecorder.WriteHeader(status)
+}
+
+func TestCheckLimitUsesInterfaceDecisionContextAndQueryUserID(t *testing.T) {
+	backendError := errors.New("private backend connection details")
+	tests := []struct {
+		name       string
+		allowed    bool
+		err        error
+		wantStatus int
+		wantBody   string
+	}{
+		{name: "allowed", allowed: true, wantStatus: http.StatusOK},
+		{name: "denied", wantStatus: http.StatusTooManyRequests},
+		{name: "error", err: backendError, wantStatus: http.StatusServiceUnavailable, wantBody: "rate limiter unavailable\n"},
+		{name: "error overrides allowed", allowed: true, err: backendError, wantStatus: http.StatusServiceUnavailable, wantBody: "rate limiter unavailable\n"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
 			const userID = "user+42@example.com"
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			request := httptest.NewRequest(http.MethodGet, "/check?userid="+url.QueryEscape(userID), nil).WithContext(ctx)
 			calls := 0
-			fake := requestLimiterFunc(func(got string) bool {
+			fake := requestLimiterFunc(func(gotContext context.Context, gotUserID string) (bool, error) {
 				calls++
-				if got != userID {
-					t.Errorf("Allow received user ID %q, want %q", got, userID)
+				if gotContext != request.Context() {
+					t.Error("Allow did not receive the exact request context")
 				}
-				return allowed
+				if gotUserID != userID {
+					t.Errorf("Allow received user ID %q, want %q", gotUserID, userID)
+				}
+				return tt.allowed, tt.err
 			})
 			handler := handlers.CheckLimit(fake)
 			if calls != 0 {
 				t.Fatal("factory called Allow before any request arrived")
 			}
-			response := httptest.NewRecorder()
-			handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/check?userid="+url.QueryEscape(userID), nil))
-			want := http.StatusTooManyRequests
-			if allowed {
-				want = http.StatusOK
+			response := &checkResponseRecorder{ResponseRecorder: httptest.NewRecorder()}
+			handler.ServeHTTP(response, request)
+			if response.Code != tt.wantStatus {
+				t.Errorf("status = %d, want %d", response.Code, tt.wantStatus)
 			}
-			if response.Code != want {
-				t.Errorf("status = %d, want %d", response.Code, want)
+			if got := response.Body.String(); got != tt.wantBody {
+				t.Errorf("body = %q, want %q", got, tt.wantBody)
+			}
+			if len(response.statusWrites) != 1 || response.statusWrites[0] != tt.wantStatus {
+				t.Errorf("WriteHeader calls = %v, want [%d]", response.statusWrites, tt.wantStatus)
 			}
 			if calls != 1 {
 				t.Errorf("Allow called %d times, want 1", calls)

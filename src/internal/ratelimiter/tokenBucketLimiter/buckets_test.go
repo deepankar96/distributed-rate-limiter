@@ -1,6 +1,8 @@
 package tokenbucketlimiter
 
 import (
+	"context"
+	"errors"
 	"strconv"
 	"sync"
 	"testing"
@@ -39,7 +41,7 @@ func TestForBucketCreatesAndReusesState(t *testing.T) {
 	if len(collection.buckets) != 1 || collection.buckets["alice"] != first {
 		t.Fatal("map does not retain the user's bucket")
 	}
-	if !collection.Allow("alice") || first.token != 1.5 {
+	if !mustAllow(t, collection, "alice") || first.token != 1.5 {
 		t.Fatal("Allow did not consume the same state returned by forBucket")
 	}
 }
@@ -47,13 +49,13 @@ func TestForBucketCreatesAndReusesState(t *testing.T) {
 func TestAllowIndependentUsersAndCollections(t *testing.T) {
 	first := New(0, 1)
 	second := New(0, 1)
-	if !first.Allow("alice") || first.Allow("alice") {
+	if !mustAllow(t, first, "alice") || mustAllow(t, first, "alice") {
 		t.Fatal("first collection should allow alice exactly once")
 	}
-	if !first.Allow("bob") || first.Allow("bob") {
+	if !mustAllow(t, first, "bob") || mustAllow(t, first, "bob") {
 		t.Fatal("bob should have a balance independent of alice")
 	}
-	if !second.Allow("alice") || second.Allow("alice") {
+	if !mustAllow(t, second, "alice") || mustAllow(t, second, "alice") {
 		t.Fatal("second collection should have an independent balance for alice")
 	}
 	if first.forBucket("alice") == first.forBucket("bob") {
@@ -67,11 +69,11 @@ func TestAllowIndependentUsersAndCollections(t *testing.T) {
 func TestAllowUsesConfiguredCapacity(t *testing.T) {
 	collection := New(0, 2.5)
 	for i := 0; i < 2; i++ {
-		if !collection.Allow("alice") {
+		if !mustAllow(t, collection, "alice") {
 			t.Fatalf("request %d denied before configured capacity exhausted", i+1)
 		}
 	}
-	if collection.Allow("alice") {
+	if mustAllow(t, collection, "alice") {
 		t.Fatal("request allowed with less than one token")
 	}
 	if got := collection.forBucket("alice").token; got != 0.5 {
@@ -84,7 +86,7 @@ func TestAllowUsesConfiguredRefillAndCap(t *testing.T) {
 	b := collection.forBucket("alice")
 	b.token = 0
 	b.lastUpdated = time.Now().Add(-time.Hour)
-	if !collection.Allow("alice") {
+	if !mustAllow(t, collection, "alice") {
 		t.Fatal("request denied after sufficient time for configured refill")
 	}
 	if b.token != 1.5 {
@@ -169,7 +171,11 @@ func TestAllowConcurrentExactCapacity(t *testing.T) {
 	const capacity = 23
 	collection := New(0, capacity)
 	allowed := concurrentAllowed(100, func() bool {
-		return collection.Allow("alice")
+		allowed, err := collection.Allow(context.Background(), "alice")
+		if err != nil {
+			t.Errorf("Allow returned an unexpected error: %v", err)
+		}
+		return allowed
 	})
 	if allowed != capacity {
 		t.Fatalf("allowed requests = %d, want %d", allowed, capacity)
@@ -179,5 +185,43 @@ func TestAllowConcurrentExactCapacity(t *testing.T) {
 	}
 	if got := collection.forBucket("alice").token; got != 0 {
 		t.Fatalf("remaining tokens = %v, want 0", got)
+	}
+}
+
+func mustAllow(t *testing.T, collection *buckets, userID string) bool {
+	t.Helper()
+	allowed, err := collection.Allow(context.Background(), userID)
+	if err != nil {
+		t.Fatalf("Allow(%q): %v", userID, err)
+	}
+	return allowed
+}
+
+func TestAllowCancelledContextDoesNotCreateBucket(t *testing.T) {
+	collection := New(0, 5)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	allowed, err := collection.Allow(ctx, "alice")
+	if allowed || !errors.Is(err, context.Canceled) {
+		t.Fatalf("got (%v, %v), want (false, context.Canceled)", allowed, err)
+	}
+	if len(collection.buckets) != 0 {
+		t.Fatal("cancelled request created a bucket")
+	}
+}
+
+func TestAllowExpiredContextDoesNotConsume(t *testing.T) {
+	collection := New(0, 5)
+	b := collection.forBucket("alice")
+	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
+	defer cancel()
+
+	allowed, err := collection.Allow(ctx, "alice")
+	if allowed || !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("got (%v, %v), want (false, context.DeadlineExceeded)", allowed, err)
+	}
+	if b.token != 5 {
+		t.Errorf("expired request changed balance to %v, want 5", b.token)
 	}
 }
